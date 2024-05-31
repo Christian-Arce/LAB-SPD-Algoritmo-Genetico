@@ -1,4 +1,3 @@
-#include <omp.h>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -36,20 +35,60 @@ void evaluar_Poblacion(const std::vector<std::vector<int>>& poblacion, std::vect
     }
 }
 
+// Selección de individuos (torneo)
+int seleccionar_Padres(const std::vector<double>& aptitudes) {
+    int tamTorneo = 3; // Tamaño del torneo
+    int mejor = rand() % aptitudes.size();
+    for (int i = 1; i < tamTorneo; ++i) {
+        int contendor = rand() % aptitudes.size();
+        if (aptitudes[contendor] > aptitudes[mejor]) {
+            mejor = contendor;
+        }
+    }
+    return mejor;
+}
+
+// Cruce de un punto
+std::vector<int> cruzar(const std::vector<int>& padre1, const std::vector<int>& padre2) {
+    int puntoCruce = rand() % padre1.size();
+    std::vector<int> hijo(padre1.size());
+    for (int i = 0; i < padre1.size(); ++i) {
+        if (i < puntoCruce) {
+            hijo[i] = padre1[i];
+        } else {
+            hijo[i] = padre2[i];
+        }
+    }
+    return hijo;
+}
+
+// Mutación
+void mutar(std::vector<int>& individuo, double tasaMutacion) {
+    for (int i = 0; i < individuo.size(); ++i) {
+        if ((rand() / double(RAND_MAX)) < tasaMutacion) {
+            individuo[i] = !individuo[i];
+        }
+    }
+}
+
 // Selección de la próxima generación
-std::vector<std::vector<int>> seleccionar_Nueva_Generacion(const std::vector<std::vector<int>>& poblacion, const std::vector<double>& aptitudes) {
+std::vector<std::vector<int>> seleccionar_Nueva_Generacion(const std::vector<std::vector<int>>& poblacion, const std::vector<double>& aptitudes, double tasaMutacion) {
     std::vector<std::vector<int>> nueva_generacion;
     for (size_t i = 0; i < poblacion.size() / 2; ++i) {
-        // Seleccionar dos padres al azar
-        int padre1 = rand() % poblacion.size();
-        int padre2 = rand() % poblacion.size();
+        int padre1 = seleccionar_Padres(aptitudes);
+        int padre2 = seleccionar_Padres(aptitudes);
 
-        // Cruzar y mutar para obtener descendencia
-        // Aquí se podría implementar una de las operaciones de cruce y mutación
+        // Cruzar
+        std::vector<int> hijo1 = cruzar(poblacion[padre1], poblacion[padre2]);
+        std::vector<int> hijo2 = cruzar(poblacion[padre2], poblacion[padre1]);
+
+        // Mutar
+        mutar(hijo1, tasaMutacion);
+        mutar(hijo2, tasaMutacion);
 
         // Agregar hijos a la nueva generación
-        nueva_generacion.push_back(poblacion[padre1]);
-        nueva_generacion.push_back(poblacion[padre2]);
+        nueva_generacion.push_back(hijo1);
+        nueva_generacion.push_back(hijo2);
     }
     return nueva_generacion;
 }
@@ -58,19 +97,13 @@ int main() {
     srand(time(0));
 
     // Parámetros del algoritmo genético
-    const int tamPoblacion = 1000;
-    const int tamanoIndividuo = 10;
-    const int numGeneraciones = 10000;
+    const int tamPoblacion = 8000;
+    const int tamanoIndividuo = 18;
+    const int numGeneraciones = 12000;
+    const double tasaMutacion = 0.01;
 
     // Inicialización de población
-    std::vector<std::vector<int>> poblacion;
-    for (int i = 0; i < tamPoblacion; ++i) {
-        std::vector<int> individuo(tamanoIndividuo);
-        for (int j = 0; j < tamanoIndividuo; ++j) {
-            individuo[j] = rand() % 2; // Genera aleatoriamente 0 o 1
-        }
-        poblacion.push_back(individuo);
-    }
+    std::vector<std::vector<int>> poblacion = crear_Poblacion(tamPoblacion, tamanoIndividuo);
     std::vector<double> aptitudes(tamPoblacion);
 
     // Medición de tiempo de ejecución
@@ -78,19 +111,19 @@ int main() {
 
     // Bucle principal del algoritmo genético
     for (int generacion = 0; generacion < numGeneraciones; ++generacion) {
-        // Evaluación de aptitud (paralelizado)
-        #pragma omp parallel for
-        for (size_t i = 0; i < poblacion.size(); ++i) {
-            aptitudes[i] = get_Aptitude(poblacion[i]);
-        }
+        // Evaluación de aptitud
+        evaluar_Poblacion(poblacion, aptitudes);
 
         // Selección de la próxima generación
-        poblacion = seleccionar_Nueva_Generacion(poblacion, aptitudes);
+        poblacion = seleccionar_Nueva_Generacion(poblacion, aptitudes, tasaMutacion);
     }
 
     // Medición de tiempo de ejecución
     auto end_time = std::chrono::steady_clock::now();
     auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+    // Evaluación final de la aptitud
+    evaluar_Poblacion(poblacion, aptitudes);
 
     // Encontrar el individuo con mayor aptitud
     double mejor_aptitud = aptitudes[0];
